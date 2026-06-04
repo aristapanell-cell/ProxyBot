@@ -1,0 +1,31 @@
+name: AristaProxy MTProto & SOCKS5 Extractor
+
+on:
+  schedule:
+    - cron: '0 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+permissions:
+  contents: write
+
+jobs:
+  extract-proxies:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.10'
+
+      - run: |
+          pip install requests beautifulsoup4
+
+      - run: python main.py
+        env:
+          BOT_TOKEN: ${{ secrets.PROXY_BOT_TOKEN }}
+          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
