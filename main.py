@@ -221,10 +221,7 @@ class MTProtoSocksExtractor:
                 n = self.normalize_proxy(f)
                 if not self.is_proxy_already_sent(n):
                     result.append(n)
-        if not result:
-            self.update_dead_cache(url)
-        else:
-            self.failed_counter[url] = 0
+        self.failed_counter[url] = 0
         return list(set(result))
 
     def collect_all_proxies(self) -> List[Tuple[str, str]]:
