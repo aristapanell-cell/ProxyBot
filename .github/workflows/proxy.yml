@@ -27,5 +27,5 @@ jobs:
 
       - run: python main.py
         env:
-          BOT_TOKEN: ${{ secrets.PROXY_BOT_TOKEN }}
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
