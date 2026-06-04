@@ -17,8 +17,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-BOT_TOKEN = os.environ.get("BOT_TOKEN", "8280213346:AAHl-MCtizJGTJ2qHbKh_bDNyt-ZUauSRuA")
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1002325683219"))
+
+if not BOT_TOKEN:
+    raise ValueError("BOT_TOKEN environment variable is required")
 
 CHANNELS = [
     "https://t.me/s/hddify",
