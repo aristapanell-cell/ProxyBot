@@ -28,7 +28,10 @@ CHANNELS = [
     "https://t.me/s/BestProxyTel1",
     "https://t.me/s/proxyir01",
     "https://t.me/s/proxymtprotoir",
-    "https://t.me/s/iRoProxy"
+    "https://t.me/s/iRoProxy",
+    "https://t.me/s/IPCF_Proxy",
+    "https://t.me/s/proxy_bolt",
+    "https://t.me/s/proxyskyy"
 ]
 
 IPV4 = r'(?:25[0-5]|2[0-4]\d|1?\d?\d)'
@@ -177,6 +180,15 @@ class MTProtoSocksExtractor:
         except:
             return None
 
+    def extract_links_from_messages(self, soup) -> List[str]:
+        links = []
+        message_links = soup.find_all('a', class_='tgme_widget_message_link')
+        for link in message_links:
+            href = link.get('href', '')
+            if 'proxy' in href or 'socks' in href:
+                links.append(href)
+        return links
+
     def extract_proxies_from_channel(self, url: str) -> List[str]:
         if self.should_skip_channel(url):
             return []
@@ -188,6 +200,7 @@ class MTProtoSocksExtractor:
 
         soup = BeautifulSoup(html, 'html.parser')
         blocks = soup.find_all('div', class_='tgme_widget_message_text')
+        button_links = self.extract_links_from_messages(soup)
 
         result = []
 
@@ -197,11 +210,17 @@ class MTProtoSocksExtractor:
                 continue
 
             found = self.extract_from_text(text)
-
             for f in found:
                 n = self.normalize_proxy(f)
                 if not self.is_proxy_already_sent(n):
                     result.append(n)
+
+        for link in button_links:
+            if self.has_ad_keywords(link):
+                continue
+            n = self.normalize_proxy(link)
+            if not self.is_proxy_already_sent(n) and n not in result:
+                result.append(n)
 
         if not result:
             self.update_dead_cache(url)
@@ -215,7 +234,7 @@ class MTProtoSocksExtractor:
         for c in CHANNELS:
             ps = self.extract_proxies_from_channel(c)
             for p in ps:
-                t = "MTProto" if "proxy" in p else "SOCKS5"
+                t = "MTProto" if "proxy" in p.lower() else "SOCKS5"
                 allp.append((p, t))
 
         seen = set()
