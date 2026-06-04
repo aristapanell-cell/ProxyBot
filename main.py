@@ -49,7 +49,7 @@ PROXY_PATTERNS = [
 
 AD_KEYWORDS = [
     'join', 'channel', 'عضویت', 'کانال', 'ادمین', 'خرید', 'فروش', 'تبلیغ',
-    'instagram.com', 'اینستاگرام', 'آموزش', 'tutorial', 'support', '@',
+    'instagram.com', 'اینستاگرام', 'آموزش', 'tutorial', 'support',
     'telegram.me/join', 't.me/join', 'click', 'لینک عضویت'
 ]
 
@@ -151,26 +151,44 @@ class MTProtoSocksExtractor:
             out += re.findall(p, text, re.IGNORECASE)
         return list(set(out))
 
+    def extract_proxy_buttons(self, soup) -> List[str]:
+        proxies = []
+        buttons = soup.find_all("a", href=True)
+        for btn in buttons:
+            href = btn.get("href", "").strip()
+            if not href:
+                continue
+            href_lower = href.lower()
+            if "joinchat" in href_lower:
+                continue
+            if "/+" in href:
+                continue
+            if (
+                href.startswith("tg://proxy?")
+                or href.startswith("tg://socks?")
+                or href.startswith("https://t.me/proxy?")
+                or href.startswith("https://t.me/socks?")
+                or href.startswith("mtproto://")
+                or href.startswith("socks5://")
+            ):
+                proxies.append(self.normalize_proxy(href))
+        return list(set(proxies))
+
     def normalize_proxy(self, proxy: str) -> str:
         proxy = proxy.strip()
-
         if proxy.startswith('https://t.me/proxy?'):
             proxy = proxy.replace('https://t.me/proxy?', 'tg://proxy?')
         elif proxy.startswith('https://t.me/socks?'):
             proxy = proxy.replace('https://t.me/socks?', 'tg://socks?')
-
         if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[a-fA-F0-9]+$', proxy):
             a, b, c = proxy.split(':')
             proxy = f"tg://proxy?server={a}&port={b}&secret={c}"
-
         elif re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+$', proxy):
             a, b = proxy.split(':')
             proxy = f"socks5://{a}:{b}"
-
         elif re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[^:]+:[^:]+$', proxy):
             a, b, c, d = proxy.split(':')
             proxy = f"socks5://{c}:{d}@{a}:{b}"
-
         return proxy
 
     def fetch_page(self, url: str) -> Optional[str]:
@@ -180,53 +198,33 @@ class MTProtoSocksExtractor:
         except:
             return None
 
-    def extract_links_from_messages(self, soup) -> List[str]:
-        links = []
-        message_links = soup.find_all('a', class_='tgme_widget_message_link')
-        for link in message_links:
-            href = link.get('href', '')
-            if 'proxy' in href or 'socks' in href:
-                links.append(href)
-        return links
-
     def extract_proxies_from_channel(self, url: str) -> List[str]:
         if self.should_skip_channel(url):
             return []
-
         html = self.fetch_page(url)
         if not html:
             self.update_dead_cache(url)
             return []
-
         soup = BeautifulSoup(html, 'html.parser')
         blocks = soup.find_all('div', class_='tgme_widget_message_text')
-        button_links = self.extract_links_from_messages(soup)
-
         result = []
-
+        button_proxies = self.extract_proxy_buttons(soup)
+        for p in button_proxies:
+            if not self.is_proxy_already_sent(p):
+                result.append(p)
         for b in blocks:
             text = b.get_text()
             if self.has_ad_keywords(text):
                 continue
-
             found = self.extract_from_text(text)
             for f in found:
                 n = self.normalize_proxy(f)
                 if not self.is_proxy_already_sent(n):
                     result.append(n)
-
-        for link in button_links:
-            if self.has_ad_keywords(link):
-                continue
-            n = self.normalize_proxy(link)
-            if not self.is_proxy_already_sent(n) and n not in result:
-                result.append(n)
-
         if not result:
             self.update_dead_cache(url)
         else:
             self.failed_counter[url] = 0
-
         return list(set(result))
 
     def collect_all_proxies(self) -> List[Tuple[str, str]]:
@@ -234,16 +232,14 @@ class MTProtoSocksExtractor:
         for c in CHANNELS:
             ps = self.extract_proxies_from_channel(c)
             for p in ps:
-                t = "MTProto" if "proxy" in p.lower() else "SOCKS5"
+                t = "MTProto" if "proxy" in p else "SOCKS5"
                 allp.append((p, t))
-
         seen = set()
         unique = []
         for p, t in allp:
             if p not in seen:
                 seen.add(p)
                 unique.append((p, t))
-
         return unique
 
 
@@ -262,7 +258,6 @@ class TelegramSender:
             }
             if reply_markup:
                 data["reply_markup"] = json.dumps(reply_markup)
-
             r = requests.post(self.api + "/sendMessage", data=data, timeout=30)
             return r.status_code == 200
         except:
@@ -271,17 +266,14 @@ class TelegramSender:
     def create_proxy_keyboard(self, proxies: List[Tuple[str, str]]) -> dict:
         kb = []
         row = []
-
         for i, (p, t) in enumerate(proxies):
             row.append({
                 "text": f"📡 {t}" if t == "MTProto" else f"🔒 {t}",
                 "url": p
             })
-
             if len(row) == 2 or i == len(proxies) - 1:
                 kb.append(row)
                 row = []
-
         return {"inline_keyboard": kb}
 
     def create_caption(self, proxies: List[Tuple[str, str]]) -> str:
@@ -307,7 +299,6 @@ class ProxyScheduler:
 
     async def run_once(self):
         proxies = self.ext.collect_all_proxies()
-
         if proxies:
             for i in range(0, len(proxies), MAX_PROXIES_PER_POST):
                 batch = proxies[i:i + MAX_PROXIES_PER_POST]
