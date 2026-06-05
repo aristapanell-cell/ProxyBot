@@ -35,7 +35,7 @@ CHANNELS = [
     "https://t.me/s/IPCF_Proxy",
     "https://t.me/s/proxy_bolt",
     "https://t.me/s/proxyskyy",
-    "https://t.me/s/ProxySkull"
+    "https://t.me/s/ProxysHUB"
 ]
 
 IPV4 = r'(?:25[0-5]|2[0-4]\d|1?\d?\d)'
