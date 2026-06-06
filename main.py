@@ -283,7 +283,7 @@ class TelegramSender:
 🛜 پروکسی‌های جدید.
 ✅ برای اتصال به پروکسی‌ها از دکمه‌های زیر استفاده کنید.
 ➖➖➖➖➖➖➖➖
-<blockquote>@aristapnel</blockquote>
+<blockquote>@aristapanel</blockquote>
 ➖➖➖➖➖➖➖➖
 #Arista #پروکسی #proxy #MTProto #SOCKS5"""
 
