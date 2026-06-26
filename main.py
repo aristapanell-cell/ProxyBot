@@ -278,8 +278,8 @@ class TelegramSender:
         return {"inline_keyboard": kb}
 
     def create_caption(self, proxies: List[Tuple[str, str]]) -> str:
-    return """🅿🆁🅾🆇🆈
-➖➖➖➖➖➖➖➖
+        return """ 🅿🆁🅾🆇🆈
+
 🛜 پروکسی‌های جدید.
 ✅ برای اتصال به پروکسی‌ها از دکمه‌های زیر استفاده کنید.
 <blockquote>👈 <a href="https://t.me/aristapanel/46625">دسترسی به جدیدترین کانفیگ‌ها</a></blockquote>
