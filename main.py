@@ -30,7 +30,12 @@ CHANNELS = [
     "https://t.me/s/ShadowProxy66",
     "https://t.me/s/BestProxyTel1",
     "https://t.me/s/proxyir01",
-    "https://t.me/s/proxymtprotoir"
+    "https://t.me/s/proxymtprotoir",
+    "https://t.me/s/iRoProxy",
+    "https://t.me/s/IPCF_Proxy",
+    "https://t.me/s/proxy_bolt",
+    "https://t.me/s/proxyskyy",
+    "https://t.me/s/ProxySkull"
 ]
 
 IPV4 = r'(?:25[0-5]|2[0-4]\d|1?\d?\d)'
@@ -273,10 +278,12 @@ class TelegramSender:
         return {"inline_keyboard": kb}
 
     def create_caption(self, proxies: List[Tuple[str, str]]) -> str:
-        return """🅰🆁🅸🆂🆃🅰 🅿🆁🅾🆇🆈
+        return """ 🅿🆁🅾🆇🆈
 ➖➖➖➖➖➖➖➖
 🛜 پروکسی‌های جدید.
 ✅ برای اتصال به پروکسی‌ها از دکمه‌های زیر استفاده کنید.
+👈 دسترسی به جدیدترین کانفیگ‌ها
+<a href="https://t.me/aristapanel/46625">https://t.me/aristapanel/46625</a>
 ➖➖➖➖➖➖➖➖
 <blockquote>@aristapanel</blockquote>
 ➖➖➖➖➖➖➖➖
