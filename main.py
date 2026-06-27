@@ -269,9 +269,9 @@ class TelegramSender:
         row = []
         for i, (p, t) in enumerate(proxies):
             if t == "MTProto":
-                label = "📡"
+                label = "MTProto"
             else:
-                label = "🔒"
+                label = "SOCKS5"
             row.append({
                 "text": label,
                 "url": p
