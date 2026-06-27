@@ -59,6 +59,7 @@ AD_KEYWORDS = [
 
 SENT_HISTORY_FILE = "sent_proxies.json"
 MAX_PROXIES_PER_POST = 20
+MAX_MESSAGES_PER_CHANNEL = 2
 
 
 class MTProtoSocksExtractor:
@@ -210,14 +211,10 @@ class MTProtoSocksExtractor:
             self.update_dead_cache(url)
             return []
         soup = BeautifulSoup(html, 'html.parser')
-        blocks = soup.find_all('div', class_='tgme_widget_message_text')
+        message_texts = soup.find_all('div', class_='tgme_widget_message_text')[:MAX_MESSAGES_PER_CHANNEL]
         result = []
-        button_proxies = self.extract_proxy_buttons(soup)
-        for p in button_proxies:
-            if not self.is_proxy_already_sent(p):
-                result.append(p)
-        for b in blocks:
-            text = b.get_text()
+        for msg in message_texts:
+            text = msg.get_text()
             if self.has_ad_keywords(text):
                 continue
             found = self.extract_from_text(text)
@@ -225,23 +222,39 @@ class MTProtoSocksExtractor:
                 n = self.normalize_proxy(f)
                 if not self.is_proxy_already_sent(n):
                     result.append(n)
+            parent = msg.find_parent('div', class_='tgme_widget_message_wrap')
+            if parent:
+                buttons = parent.find_all('a', href=True)
+                for btn in buttons:
+                    href = btn.get('href', '').strip()
+                    if not href:
+                        continue
+                    href_lower = href.lower()
+                    if "joinchat" in href_lower or "/+" in href_lower:
+                        continue
+                    if (href.startswith("tg://proxy?") or 
+                        href.startswith("tg://socks?") or 
+                        href.startswith("https://t.me/proxy?") or 
+                        href.startswith("https://t.me/socks?") or 
+                        href.startswith("mtproto://") or 
+                        href.startswith("socks5://")):
+                        n = self.normalize_proxy(href)
+                        if not self.is_proxy_already_sent(n):
+                            result.append(n)
         self.failed_counter[url] = 0
         return list(set(result))
 
     def collect_all_proxies(self) -> List[Tuple[str, str]]:
         allp = []
+        seen = set()
         for c in CHANNELS:
             ps = self.extract_proxies_from_channel(c)
             for p in ps:
-                t = "MTProto" if "proxy" in p else "SOCKS5"
-                allp.append((p, t))
-        seen = set()
-        unique = []
-        for p, t in allp:
-            if p not in seen:
-                seen.add(p)
-                unique.append((p, t))
-        return unique
+                if p not in seen:
+                    seen.add(p)
+                    t = "MTProto" if "proxy" in p or "mtproto" in p.lower() else "SOCKS5"
+                    allp.append((p, t))
+        return allp
 
 
 class TelegramSender:
