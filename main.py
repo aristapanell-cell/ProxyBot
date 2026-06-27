@@ -58,7 +58,7 @@ AD_KEYWORDS = [
 ]
 
 SENT_HISTORY_FILE = "sent_proxies.json"
-MAX_PROXIES_PER_POST = 16
+MAX_PROXIES_PER_POST = 20
 
 
 class MTProtoSocksExtractor:
@@ -268,13 +268,19 @@ class TelegramSender:
         kb = []
         row = []
         for i, (p, t) in enumerate(proxies):
+            if t == "MTProto":
+                label = "📡"
+            else:
+                label = "🔒"
             row.append({
-                "text": f"📡 {t}" if t == "MTProto" else f"🔒 {t}",
+                "text": label,
                 "url": p
             })
-            if len(row) == 2 or i == len(proxies) - 1:
+            if len(row) == 4:
                 kb.append(row)
                 row = []
+        if row:
+            kb.append(row)
         return {"inline_keyboard": kb}
 
     def create_caption(self, proxies: List[Tuple[str, str]]) -> str:
