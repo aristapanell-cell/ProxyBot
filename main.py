@@ -5,10 +5,11 @@ import hashlib
 import time
 import os
 import asyncio
+import sqlite3
+import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Set, Tuple, Optional
 from urllib.parse import urlparse, parse_qs
-import logging
 from bs4 import BeautifulSoup
 
 logging.basicConfig(
@@ -57,10 +58,107 @@ AD_KEYWORDS = [
     'telegram.me/join', 't.me/join', 'click', 'لینک عضویت'
 ]
 
-SENT_HISTORY_FILE = "sent_proxies.json"
 MAX_PROXIES_PER_POST = 20
 MAX_MESSAGES_PER_CHANNEL = 2
+KEEP_HOURS = 168
+DB_PATH = "sent_proxies.db"
 
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS sent_proxies (
+            proxy_hash TEXT PRIMARY KEY,
+            proxy TEXT NOT NULL,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS dead_cache (
+            url TEXT PRIMARY KEY,
+            failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    conn.commit()
+    conn.close()
+    logger.info(f"Database initialized at {DB_PATH}")
+
+def clean_old_proxies():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    cutoff = datetime.now() - timedelta(hours=KEEP_HOURS)
+    c.execute("DELETE FROM sent_proxies WHERE sent_at < ?", (cutoff,))
+    deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    if deleted:
+        logger.info(f"Cleaned {deleted} old proxies.")
+
+def get_sent_proxy_hashes():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT proxy_hash FROM sent_proxies")
+    rows = c.fetchall()
+    conn.close()
+    sent_count = len(rows)
+    logger.info(f"Loaded {sent_count} previously sent proxies from database")
+    return {row[0] for row in rows}
+
+def mark_as_sent(proxy):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    proxy_hash = hashlib.md5(proxy.encode()).hexdigest()
+    c.execute("INSERT OR IGNORE INTO sent_proxies (proxy_hash, proxy, sent_at) VALUES (?, ?, ?)",
+              (proxy_hash, proxy, datetime.now()))
+    conn.commit()
+    conn.close()
+    logger.info(f"Marked proxy as sent: {proxy[:50]}...")
+
+def mark_as_sent_batch(proxies):
+    if not proxies:
+        return
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    now = datetime.now()
+    data = [(hashlib.md5(p.encode()).hexdigest(), p, now) for p in proxies]
+    c.executemany("INSERT OR IGNORE INTO sent_proxies (proxy_hash, proxy, sent_at) VALUES (?, ?, ?)", data)
+    conn.commit()
+    conn.close()
+    logger.info(f"Marked {len(proxies)} proxies as sent.")
+
+def get_dead_cache():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("SELECT url FROM dead_cache")
+    rows = c.fetchall()
+    conn.close()
+    return {row[0] for row in rows}
+
+def add_to_dead_cache(url):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("INSERT OR REPLACE INTO dead_cache (url, failed_at) VALUES (?, ?)",
+              (url, datetime.now()))
+    conn.commit()
+    conn.close()
+
+def remove_from_dead_cache(url):
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    c.execute("DELETE FROM dead_cache WHERE url = ?", (url,))
+    conn.commit()
+    conn.close()
+
+def clean_dead_cache():
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    cutoff = datetime.now() - timedelta(hours=24)
+    c.execute("DELETE FROM dead_cache WHERE failed_at < ?", (cutoff,))
+    deleted = c.rowcount
+    conn.commit()
+    conn.close()
+    if deleted:
+        logger.info(f"Cleaned {deleted} old dead cache entries.")
 
 class MTProtoSocksExtractor:
     def __init__(self):
@@ -70,78 +168,26 @@ class MTProtoSocksExtractor:
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
             'Accept-Language': 'en-US,en;q=0.5',
         })
-        self.sent_proxies = self.load_sent_history()
-        self.cache_file = "dead_cache.json"
-        self.dead_cache = self.load_dead_cache()
+        self.sent_hashes = get_sent_proxy_hashes()
+        self.dead_cache = get_dead_cache()
         self.failed_counter = {}
-
-    def load_sent_history(self) -> Dict:
-        if os.path.exists(SENT_HISTORY_FILE):
-            try:
-                with open(SENT_HISTORY_FILE, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    for k, v in data.items():
-                        data[k] = datetime.fromisoformat(v)
-                    return data
-            except:
-                return {}
-        return {}
-
-    def save_sent_history(self):
-        try:
-            with open(SENT_HISTORY_FILE, 'w', encoding='utf-8') as f:
-                json.dump({k: v.isoformat() for k, v in self.sent_proxies.items()}, f, ensure_ascii=False, indent=2)
-        except:
-            pass
-
-    def load_dead_cache(self) -> Dict:
-        if os.path.exists(self.cache_file):
-            try:
-                with open(self.cache_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    for k, v in data.items():
-                        data[k] = datetime.fromisoformat(v)
-                    return data
-            except:
-                return {}
-        return {}
-
-    def save_dead_cache(self):
-        try:
-            with open(self.cache_file, 'w', encoding='utf-8') as f:
-                json.dump({k: v.isoformat() for k, v in self.dead_cache.items()}, f, ensure_ascii=False, indent=2)
-        except:
-            pass
 
     def should_skip_channel(self, url: str) -> bool:
         if url in self.dead_cache:
-            if datetime.now() - self.dead_cache[url] < timedelta(hours=24):
-                return True
-            else:
-                del self.dead_cache[url]
-                self.save_dead_cache()
+            return True
         return False
 
     def update_dead_cache(self, url: str):
         self.failed_counter[url] = self.failed_counter.get(url, 0) + 1
         if self.failed_counter[url] >= 3:
-            self.dead_cache[url] = datetime.now()
-            self.save_dead_cache()
+            add_to_dead_cache(url)
+            self.dead_cache.add(url)
 
     def is_proxy_already_sent(self, proxy: str) -> bool:
-        h = hashlib.md5(proxy.encode()).hexdigest()
-        if h in self.sent_proxies:
-            if datetime.now() - self.sent_proxies[h] < timedelta(hours=24):
-                return True
-            else:
-                del self.sent_proxies[h]
-                self.save_sent_history()
+        proxy_hash = hashlib.md5(proxy.encode()).hexdigest()
+        if proxy_hash in self.sent_hashes:
+            return True
         return False
-
-    def mark_as_sent(self, proxy: str):
-        h = hashlib.md5(proxy.encode()).hexdigest()
-        self.sent_proxies[h] = datetime.now()
-        self.save_sent_history()
 
     def has_ad_keywords(self, text: str) -> bool:
         t = text.lower()
@@ -242,6 +288,8 @@ class MTProtoSocksExtractor:
                         if not self.is_proxy_already_sent(n):
                             result.append(n)
         self.failed_counter[url] = 0
+        remove_from_dead_cache(url)
+        self.dead_cache.discard(url)
         return list(set(result))
 
     def collect_all_proxies(self) -> List[Tuple[str, str]]:
@@ -315,18 +363,26 @@ class TelegramSender:
 
 class ProxyScheduler:
     def __init__(self):
+        init_db()
+        clean_old_proxies()
+        clean_dead_cache()
         self.ext = MTProtoSocksExtractor()
         self.sender = TelegramSender(BOT_TOKEN, CHANNEL_ID)
 
     async def run_once(self):
         proxies = self.ext.collect_all_proxies()
         if proxies:
+            sent_in_run = []
             for i in range(0, len(proxies), MAX_PROXIES_PER_POST):
                 batch = proxies[i:i + MAX_PROXIES_PER_POST]
                 if self.sender.send_proxies_batch(batch):
                     for p, _ in batch:
-                        self.ext.mark_as_sent(p)
+                        sent_in_run.append(p)
                 await asyncio.sleep(1)
+            if sent_in_run:
+                mark_as_sent_batch(sent_in_run)
+                for p in sent_in_run:
+                    self.ext.sent_hashes.add(hashlib.md5(p.encode()).hexdigest())
 
 
 def main():
