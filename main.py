@@ -244,7 +244,8 @@ class MTProtoSocksExtractor:
 
     def fetch_page(self, url: str) -> Optional[str]:
         try:
-            r = self.session.get(url, timeout=20)
+            telegram_url = url.replace('t.me', 'telegram.me')
+            r = self.session.get(telegram_url, timeout=20)
             return r.text
         except:
             return None
