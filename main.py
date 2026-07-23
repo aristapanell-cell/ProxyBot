@@ -356,7 +356,8 @@ class TelegramSender:
 ➖➖➖➖➖➖➖➖
 <blockquote>@aristapanel</blockquote>
 ➖➖➖➖➖➖➖➖
-#Arista #پروکسی #proxy #MTProto #SOCKS5"""
+#Arista #پروکسی #proxy #MTProto #SOCKS5
+<blockquote>مرگ بر جمهوری اسهالی</blockquote>"""
 
     def send_proxies_batch(self, proxies: List[Tuple[str, str]]) -> bool:
         if not proxies:
