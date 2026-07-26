@@ -310,8 +310,29 @@ class MTProtoSocksExtractor:
 
 class TelegramSender:
     def __init__(self, token: str, chat_id: int):
-        self.api = f"https://api.telegram.org/bot{token}"
+        self.token = token
         self.chat_id = chat_id
+        self.api = f"https://api.telegram.org/bot{token}"
+
+    def send_sticker(self):
+        try:
+            data = {
+                "chat_id": self.chat_id,
+                "sticker": "CAACAgQAAxkBAAFQHzNqZV7ukQpLInqWTkkjXH1OFuJjRgAC9xkAAs-nMFMajFNG7THbSj0E"
+            }
+            r = requests.post(
+                self.api + "/sendSticker",
+                data=data,
+                timeout=30
+            )
+            if r.status_code == 200:
+                logger.info("Logo sticker sent successfully.")
+            else:
+                logger.warning("Failed to send logo sticker.")
+            return r.status_code == 200
+        except Exception as e:
+            logger.error(f"Sticker send failed: {e}")
+            return False
 
     def send_message(self, text: str, reply_markup=None) -> bool:
         try:
@@ -375,8 +396,8 @@ class ProxyScheduler:
 
     async def run_once(self):
         proxies = self.ext.collect_all_proxies()
+        sent_in_run = []
         if proxies:
-            sent_in_run = []
             for i in range(0, len(proxies), MAX_PROXIES_PER_POST):
                 batch = proxies[i:i + MAX_PROXIES_PER_POST]
                 if self.sender.send_proxies_batch(batch):
@@ -387,6 +408,7 @@ class ProxyScheduler:
                 mark_as_sent_batch(sent_in_run)
                 for p in sent_in_run:
                     self.ext.sent_hashes.add(hashlib.md5(p.encode()).hexdigest())
+                self.sender.send_sticker()
 
 
 def main():
