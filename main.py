@@ -318,7 +318,7 @@ class TelegramSender:
         try:
             data = {
                 "chat_id": self.chat_id,
-                "sticker": "CAACAgQAAxkBAAFQHzNqZV7ukQpLInqWTkkjXH1OFuJjRgAC9xkAAs-nMFMajFNG7THbSj0E"
+                "sticker": "CAACAgQAAxkBAAFQIL5qZXtiZQTtLDIR56wqlUYO_JqmZgACvBsAAl2aMFOFxfprKF6fCz0E"
             }
             r = requests.post(
                 self.api + "/sendSticker",
