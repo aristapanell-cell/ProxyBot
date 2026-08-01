@@ -26,6 +26,7 @@ if not BOT_TOKEN:
 
 CHANNELS = [
     "https://t.me/s/hddify",
+    "https://t.me/s/khabari_18",
     "https://t.me/s/best_internet_iran",
     "https://t.me/s/times_config",
     "https://t.me/s/ProxyAnonymous",
