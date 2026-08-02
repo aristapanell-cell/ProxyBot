@@ -230,6 +230,7 @@ class MTProtoSocksExtractor:
 
     def normalize_proxy(self, proxy: str) -> str:
         proxy = proxy.strip()
+        proxy = proxy.replace('amp;', '')
         if proxy.startswith('https://t.me/proxy?'):
             proxy = proxy.replace('https://t.me/proxy?', 'tg://proxy?')
         elif proxy.startswith('https://t.me/socks?'):
