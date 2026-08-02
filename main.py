@@ -234,15 +234,20 @@ class MTProtoSocksExtractor:
             proxy = proxy.replace('https://t.me/proxy?', 'tg://proxy?')
         elif proxy.startswith('https://t.me/socks?'):
             proxy = proxy.replace('https://t.me/socks?', 'tg://socks?')
+        if proxy.startswith(("tg://proxy?", "tg://socks?")):
+            parsed = urlparse(proxy)
+            q = parse_qs(parsed.query)
+            params = {k: q[k][0].strip() for k in sorted(q) if q[k]}
+            return parsed.scheme + "://" + parsed.netloc + "?" + "&".join(f"{k}={params[k]}" for k in sorted(params))
         if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[a-fA-F0-9]+$', proxy):
-            a, b, c = proxy.split(':')
-            proxy = f"tg://proxy?server={a}&port={b}&secret={c}"
-        elif re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+$', proxy):
-            a, b = proxy.split(':')
-            proxy = f"socks5://{a}:{b}"
-        elif re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[^:]+:[^:]+$', proxy):
-            a, b, c, d = proxy.split(':')
-            proxy = f"socks5://{c}:{d}@{a}:{b}"
+            ip, port, secret = proxy.split(':')
+            return f"tg://proxy?port={port}&secret={secret.lower()}&server={ip}"
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+$', proxy):
+            ip, port = proxy.split(':')
+            return f"socks5://{ip}:{port}"
+        if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[^:]+:[^:]+$', proxy):
+            ip, port, user, pwd = proxy.split(':')
+            return f"socks5://{user}:{pwd}@{ip}:{port}"
         return proxy
 
     def fetch_page(self, url: str) -> Optional[str]:
@@ -263,6 +268,7 @@ class MTProtoSocksExtractor:
         soup = BeautifulSoup(html, 'html.parser')
         message_texts = soup.find_all('div', class_='tgme_widget_message_text')[:MAX_MESSAGES_PER_CHANNEL]
         result = []
+        seen = set()
         for msg in message_texts:
             text = msg.get_text()
             if self.has_ad_keywords(text):
@@ -270,7 +276,8 @@ class MTProtoSocksExtractor:
             found = self.extract_from_text(text)
             for f in found:
                 n = self.normalize_proxy(f)
-                if not self.is_proxy_already_sent(n):
+                if n not in seen and not self.is_proxy_already_sent(n):
+                    seen.add(n)
                     result.append(n)
             parent = msg.find_parent('div', class_='tgme_widget_message_wrap')
             if parent:
@@ -289,12 +296,13 @@ class MTProtoSocksExtractor:
                         href.startswith("mtproto://") or 
                         href.startswith("socks5://")):
                         n = self.normalize_proxy(href)
-                        if not self.is_proxy_already_sent(n):
+                        if n not in seen and not self.is_proxy_already_sent(n):
+                            seen.add(n)
                             result.append(n)
         self.failed_counter[url] = 0
         remove_from_dead_cache(url)
         self.dead_cache.discard(url)
-        return list(set(result))
+        return result
 
     def collect_all_proxies(self) -> List[Tuple[str, str]]:
         allp = []
