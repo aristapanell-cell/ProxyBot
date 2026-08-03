@@ -31,7 +31,7 @@ CHANNELS = [
     "https://t.me/s/times_config",
     "https://t.me/s/ProxyAnonymous",
     "https://t.me/s/JavidanNet",
-    "https://t.me/s/ShadowProxy66",
+    "https://t.me/s/ProxyMTProto_tel",
     "https://t.me/s/BestProxyTel1",
     "https://t.me/s/proxyir01",
     "https://t.me/s/proxymtprotoir",
