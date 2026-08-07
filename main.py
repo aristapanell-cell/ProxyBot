@@ -25,6 +25,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
 CHANNELS = [
+    "https://t.me/s/xixv2ray",
     "https://t.me/s/hddify",
     "https://t.me/s/khabari_18",
     "https://t.me/s/best_internet_iran",
