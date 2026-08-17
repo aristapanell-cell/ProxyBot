@@ -16,6 +16,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s'
 )
+
 logger = logging.getLogger(__name__)
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -24,13 +25,12 @@ CHANNEL_ID = int(os.environ.get("CHANNEL_ID", "-1002325683219"))
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
-CHANNELS = [
+CHANNELS = list(dict.fromkeys([
     "https://t.me/s/times_config",
     "https://t.me/s/xixv2ray",
     "https://t.me/s/hddify",
     "https://t.me/s/khabari_18",
     "https://t.me/s/best_internet_iran",
-    "https://t.me/s/times_config",
     "https://t.me/s/ProxyAnonymous",
     "https://t.me/s/JavidanNet",
     "https://t.me/s/ProxyMTProto_tel",
@@ -42,7 +42,7 @@ CHANNELS = [
     "https://t.me/s/proxy_bolt",
     "https://t.me/s/proxyskyy",
     "https://t.me/s/ProxySkull"
-]
+]))
 
 IPV4 = r'(?:25[0-5]|2[0-4]\d|1?\d?\d)'
 
@@ -58,9 +58,23 @@ PROXY_PATTERNS = [
 ]
 
 AD_KEYWORDS = [
-    'join', 'channel', 'عضویت', 'کانال', 'ادمین', 'خرید', 'فروش', 'تبلیغ',
-    'instagram.com', 'اینستاگرام', 'آموزش', 'tutorial', 'support',
-    'telegram.me/join', 't.me/join', 'click', 'لینک عضویت'
+    'join',
+    'channel',
+    'عضویت',
+    'کانال',
+    'ادمین',
+    'خرید',
+    'فروش',
+    'تبلیغ',
+    'instagram.com',
+    'اینستاگرام',
+    'آموزش',
+    'tutorial',
+    'support',
+    'telegram.me/join',
+    't.me/join',
+    'click',
+    'لینک عضویت'
 ]
 
 MAX_PROXIES_PER_POST = 20
@@ -68,157 +82,411 @@ MAX_MESSAGES_PER_CHANNEL = 5
 KEEP_HOURS = 168
 DB_PATH = "sent_proxies.db"
 
+STICKER_ID = (
+    "CAACAgQAAxkBAAFQIL5qZXtiZQTtLDIR56wqlUYO_JqmZgACvBsAAl2aMFOFxfprKF6fCz0E"
+)
+
+
 def init_db():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS sent_proxies (
-            proxy_hash TEXT PRIMARY KEY,
-            proxy TEXT NOT NULL,
-            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    c.execute("""
-        CREATE TABLE IF NOT EXISTS dead_cache (
-            url TEXT PRIMARY KEY,
-            failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS sent_proxies (
+                proxy_hash TEXT PRIMARY KEY,
+                proxy TEXT NOT NULL,
+                sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS dead_cache (
+                url TEXT PRIMARY KEY,
+                failed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        c.execute("""
+            CREATE TABLE IF NOT EXISTS bot_messages (
+                message_id INTEGER PRIMARY KEY,
+                message_type TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
     logger.info(f"Database initialized at {DB_PATH}")
+
 
 def clean_old_proxies():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    cutoff = datetime.now() - timedelta(hours=KEEP_HOURS)
-    c.execute("DELETE FROM sent_proxies WHERE sent_at < ?", (cutoff,))
-    deleted = c.rowcount
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+        cutoff = datetime.now() - timedelta(hours=KEEP_HOURS)
+
+        c.execute(
+            "DELETE FROM sent_proxies WHERE sent_at < ?",
+            (cutoff,)
+        )
+
+        deleted = c.rowcount
+        conn.commit()
+
+    finally:
+        conn.close()
+
     if deleted:
         logger.info(f"Cleaned {deleted} old proxies.")
 
+
 def get_sent_proxy_hashes():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT proxy_hash FROM sent_proxies")
-    rows = c.fetchall()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+        c.execute("SELECT proxy_hash FROM sent_proxies")
+        rows = c.fetchall()
+
+    finally:
+        conn.close()
+
     sent_count = len(rows)
-    logger.info(f"Loaded {sent_count} previously sent proxies from database")
+
+    logger.info(
+        f"Loaded {sent_count} previously sent proxies from database"
+    )
+
     return {row[0] for row in rows}
+
 
 def mark_as_sent(proxy):
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    proxy_hash = hashlib.md5(proxy.encode()).hexdigest()
-    c.execute("INSERT OR IGNORE INTO sent_proxies (proxy_hash, proxy, sent_at) VALUES (?, ?, ?)",
-              (proxy_hash, proxy, datetime.now()))
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+
+        proxy_hash = hashlib.md5(
+            proxy.encode("utf-8")
+        ).hexdigest()
+
+        c.execute(
+            """
+            INSERT OR IGNORE INTO sent_proxies
+            (proxy_hash, proxy, sent_at)
+            VALUES (?, ?, ?)
+            """,
+            (
+                proxy_hash,
+                proxy,
+                datetime.now()
+            )
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
     logger.info(f"Marked proxy as sent: {proxy[:50]}...")
+
 
 def mark_as_sent_batch(proxies):
     if not proxies:
         return
+
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    now = datetime.now()
-    data = [(hashlib.md5(p.encode()).hexdigest(), p, now) for p in proxies]
-    c.executemany("INSERT OR IGNORE INTO sent_proxies (proxy_hash, proxy, sent_at) VALUES (?, ?, ?)", data)
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+        now = datetime.now()
+
+        data = [
+            (
+                hashlib.md5(
+                    proxy.encode("utf-8")
+                ).hexdigest(),
+                proxy,
+                now
+            )
+            for proxy in proxies
+        ]
+
+        c.executemany(
+            """
+            INSERT OR IGNORE INTO sent_proxies
+            (proxy_hash, proxy, sent_at)
+            VALUES (?, ?, ?)
+            """,
+            data
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
     logger.info(f"Marked {len(proxies)} proxies as sent.")
+
 
 def get_dead_cache():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("SELECT url FROM dead_cache")
-    rows = c.fetchall()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+        c.execute("SELECT url FROM dead_cache")
+        rows = c.fetchall()
+
+    finally:
+        conn.close()
+
     return {row[0] for row in rows}
+
 
 def add_to_dead_cache(url):
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("INSERT OR REPLACE INTO dead_cache (url, failed_at) VALUES (?, ?)",
-              (url, datetime.now()))
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+
+        c.execute(
+            """
+            INSERT OR REPLACE INTO dead_cache
+            (url, failed_at)
+            VALUES (?, ?)
+            """,
+            (
+                url,
+                datetime.now()
+            )
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
 
 def remove_from_dead_cache(url):
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    c.execute("DELETE FROM dead_cache WHERE url = ?", (url,))
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+
+        c.execute(
+            "DELETE FROM dead_cache WHERE url = ?",
+            (url,)
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
 
 def clean_dead_cache():
     conn = sqlite3.connect(DB_PATH)
-    c = conn.cursor()
-    cutoff = datetime.now() - timedelta(hours=24)
-    c.execute("DELETE FROM dead_cache WHERE failed_at < ?", (cutoff,))
-    deleted = c.rowcount
-    conn.commit()
-    conn.close()
+
+    try:
+        c = conn.cursor()
+        cutoff = datetime.now() - timedelta(hours=24)
+
+        c.execute(
+            "DELETE FROM dead_cache WHERE failed_at < ?",
+            (cutoff,)
+        )
+
+        deleted = c.rowcount
+        conn.commit()
+
+    finally:
+        conn.close()
+
     if deleted:
-        logger.info(f"Cleaned {deleted} old dead cache entries.")
+        logger.info(
+            f"Cleaned {deleted} old dead cache entries."
+        )
+
+
+def save_bot_message(message_id: int, message_type: str):
+    conn = sqlite3.connect(DB_PATH)
+
+    try:
+        c = conn.cursor()
+
+        c.execute(
+            """
+            INSERT OR REPLACE INTO bot_messages
+            (message_id, message_type, created_at)
+            VALUES (?, ?, ?)
+            """,
+            (
+                message_id,
+                message_type,
+                datetime.now()
+            )
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
+    logger.info(
+        f"Saved {message_type} message: {message_id}"
+    )
+
+
+def get_bot_messages():
+    conn = sqlite3.connect(DB_PATH)
+
+    try:
+        c = conn.cursor()
+
+        c.execute(
+            """
+            SELECT message_id, message_type
+            FROM bot_messages
+            ORDER BY message_id ASC
+            """
+        )
+
+        rows = c.fetchall()
+
+    finally:
+        conn.close()
+
+    return rows
+
+
+def delete_bot_message_record(message_id: int):
+    conn = sqlite3.connect(DB_PATH)
+
+    try:
+        c = conn.cursor()
+
+        c.execute(
+            "DELETE FROM bot_messages WHERE message_id = ?",
+            (message_id,)
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
+
+def clear_bot_messages():
+    conn = sqlite3.connect(DB_PATH)
+
+    try:
+        c = conn.cursor()
+
+        c.execute("DELETE FROM bot_messages")
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
 
 class MTProtoSocksExtractor:
+
     def __init__(self):
         self.session = requests.Session()
+
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9',
-            'Accept-Language': 'en-US,en;q=0.5',
+            "User-Agent": (
+                "Mozilla/5.0 "
+                "(Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 "
+                "(KHTML, like Gecko) "
+                "Chrome/131.0 Safari/537.36"
+            ),
+            "Accept": (
+                "text/html,application/xhtml+xml,"
+                "application/xml;q=0.9,*/*;q=0.8"
+            ),
+            "Accept-Language": "en-US,en;q=0.5",
         })
+
         self.sent_hashes = get_sent_proxy_hashes()
         self.dead_cache = get_dead_cache()
         self.failed_counter = {}
 
     def should_skip_channel(self, url: str) -> bool:
-        if url in self.dead_cache:
-            return True
-        return False
+        return url in self.dead_cache
 
     def update_dead_cache(self, url: str):
-        self.failed_counter[url] = self.failed_counter.get(url, 0) + 1
+        self.failed_counter[url] = (
+            self.failed_counter.get(url, 0) + 1
+        )
+
         if self.failed_counter[url] >= 3:
             add_to_dead_cache(url)
             self.dead_cache.add(url)
 
+            logger.warning(
+                f"Channel added to dead cache: {url}"
+            )
+
     def is_proxy_already_sent(self, proxy: str) -> bool:
-        proxy_hash = hashlib.md5(proxy.encode()).hexdigest()
-        if proxy_hash in self.sent_hashes:
-            return True
-        return False
+        proxy_hash = hashlib.md5(
+            proxy.encode("utf-8")
+        ).hexdigest()
+
+        return proxy_hash in self.sent_hashes
 
     def has_ad_keywords(self, text: str) -> bool:
         t = text.lower()
-        for k in AD_KEYWORDS:
-            if k in t:
-                return True
-        return False
+
+        return any(
+            keyword in t
+            for keyword in AD_KEYWORDS
+        )
 
     def extract_from_text(self, text: str) -> List[str]:
         out = []
-        for p in PROXY_PATTERNS:
-            out += re.findall(p, text, re.IGNORECASE)
+
+        for pattern in PROXY_PATTERNS:
+            try:
+                out.extend(
+                    re.findall(
+                        pattern,
+                        text,
+                        re.IGNORECASE
+                    )
+                )
+            except re.error as e:
+                logger.error(
+                    f"Regex error: {e}"
+                )
+
         return list(set(out))
 
     def extract_proxy_buttons(self, soup) -> List[str]:
         proxies = []
-        buttons = soup.find_all("a", href=True)
-        for btn in buttons:
+
+        for btn in soup.find_all("a", href=True):
             href = btn.get("href", "").strip()
+
             if not href:
                 continue
+
             href_lower = href.lower()
+
             if "joinchat" in href_lower:
                 continue
+
             if "/+" in href:
                 continue
+
             if (
                 href.startswith("tg://proxy?")
                 or href.startswith("tg://socks?")
@@ -227,161 +495,550 @@ class MTProtoSocksExtractor:
                 or href.startswith("mtproto://")
                 or href.startswith("socks5://")
             ):
-                proxies.append(self.normalize_proxy(href))
+                normalized = self.normalize_proxy(href)
+
+                if normalized:
+                    proxies.append(normalized)
+
         return list(set(proxies))
 
     def normalize_proxy(self, proxy: str) -> str:
         proxy = proxy.strip()
-        proxy = proxy.replace('amp;', '')
-        if proxy.startswith('https://t.me/proxy?'):
-            proxy = proxy.replace('https://t.me/proxy?', 'tg://proxy?')
-        elif proxy.startswith('https://t.me/socks?'):
-            proxy = proxy.replace('https://t.me/socks?', 'tg://socks?')
-        if proxy.startswith(("tg://proxy?", "tg://socks?")):
-            parsed = urlparse(proxy)
-            q = parse_qs(parsed.query)
-            params = {k: q[k][0].strip() for k in sorted(q) if q[k]}
-            return parsed.scheme + "://" + parsed.netloc + "?" + "&".join(f"{k}={params[k]}" for k in sorted(params))
-        if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[a-fA-F0-9]+$', proxy):
-            ip, port, secret = proxy.split(':')
-            return f"tg://proxy?port={port}&secret={secret.lower()}&server={ip}"
-        if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+$', proxy):
-            ip, port = proxy.split(':')
-            return f"socks5://{ip}:{port}"
-        if re.match(r'^\d{1,3}(\.\d{1,3}){3}:\d+:[^:]+:[^:]+$', proxy):
-            ip, port, user, pwd = proxy.split(':')
-            return f"socks5://{user}:{pwd}@{ip}:{port}"
+        proxy = proxy.replace("&amp;", "&")
+        proxy = proxy.replace("amp;", "")
+
+        if proxy.startswith("https://t.me/proxy?"):
+            proxy = proxy.replace(
+                "https://t.me/proxy?",
+                "tg://proxy?",
+                1
+            )
+
+        elif proxy.startswith("https://t.me/socks?"):
+            proxy = proxy.replace(
+                "https://t.me/socks?",
+                "tg://socks?",
+                1
+            )
+
+        if proxy.startswith(
+            ("tg://proxy?", "tg://socks?")
+        ):
+            try:
+                parsed = urlparse(proxy)
+                query = parse_qs(parsed.query)
+
+                params = {
+                    key: query[key][0].strip()
+                    for key in sorted(query)
+                    if query[key]
+                }
+
+                if not params:
+                    return ""
+
+                return (
+                    parsed.scheme
+                    + "://"
+                    + parsed.netloc
+                    + "?"
+                    + "&".join(
+                        f"{key}={params[key]}"
+                        for key in sorted(params)
+                    )
+                )
+
+            except Exception:
+                return proxy
+
+        if re.match(
+            r"^\d{1,3}(\.\d{1,3}){3}:\d+:[a-fA-F0-9]+$",
+            proxy
+        ):
+            try:
+                ip, port, secret = proxy.split(":")
+
+                return (
+                    f"tg://proxy?"
+                    f"port={port}"
+                    f"&secret={secret.lower()}"
+                    f"&server={ip}"
+                )
+            except ValueError:
+                return proxy
+
+        if re.match(
+            r"^\d{1,3}(\.\d{1,3}){3}:\d+$",
+            proxy
+        ):
+            try:
+                ip, port = proxy.split(":")
+
+                return f"socks5://{ip}:{port}"
+
+            except ValueError:
+                return proxy
+
+        if re.match(
+            r"^\d{1,3}(\.\d{1,3}){3}:\d+:[^:]+:[^:]+$",
+            proxy
+        ):
+            try:
+                ip, port, user, password = proxy.split(":")
+
+                return (
+                    f"socks5://"
+                    f"{user}:{password}@{ip}:{port}"
+                )
+
+            except ValueError:
+                return proxy
+
         return proxy
 
     def fetch_page(self, url: str) -> Optional[str]:
         try:
-            telegram_url = url.replace('t.me', 'telegram.me')
-            r = self.session.get(telegram_url, timeout=20)
-            return r.text
-        except:
+            telegram_url = url.replace(
+                "t.me",
+                "telegram.me"
+            )
+
+            response = self.session.get(
+                telegram_url,
+                timeout=20
+            )
+
+            if response.status_code != 200:
+                logger.warning(
+                    f"Channel request failed: "
+                    f"{url} [{response.status_code}]"
+                )
+
+                return None
+
+            return response.text
+
+        except requests.RequestException as e:
+            logger.warning(
+                f"Channel request error: {url} - {e}"
+            )
+
             return None
 
-    def extract_proxies_from_channel(self, url: str) -> List[str]:
+    def extract_proxies_from_channel(
+        self,
+        url: str
+    ) -> List[str]:
+
         if self.should_skip_channel(url):
+            logger.info(
+                f"Skipping dead channel: {url}"
+            )
             return []
+
         html = self.fetch_page(url)
+
         if not html:
             self.update_dead_cache(url)
             return []
-        soup = BeautifulSoup(html, 'html.parser')
-        message_texts = soup.find_all('div', class_='tgme_widget_message_text')[:MAX_MESSAGES_PER_CHANNEL]
-        result = []
-        seen = set()
-        for msg in message_texts:
-            text = msg.get_text()
-            if self.has_ad_keywords(text):
-                continue
-            found = self.extract_from_text(text)
-            for f in found:
-                n = self.normalize_proxy(f)
-                if n not in seen and not self.is_proxy_already_sent(n):
-                    seen.add(n)
-                    result.append(n)
-            parent = msg.find_parent('div', class_='tgme_widget_message_wrap')
-            if parent:
-                buttons = parent.find_all('a', href=True)
+
+        try:
+            soup = BeautifulSoup(
+                html,
+                "html.parser"
+            )
+
+            message_texts = soup.find_all(
+                "div",
+                class_="tgme_widget_message_text"
+            )[:MAX_MESSAGES_PER_CHANNEL]
+
+            result = []
+            seen = set()
+
+            for msg in message_texts:
+
+                text = msg.get_text(
+                    " ",
+                    strip=True
+                )
+
+                if self.has_ad_keywords(text):
+                    continue
+
+                found = self.extract_from_text(text)
+
+                for found_proxy in found:
+
+                    normalized = self.normalize_proxy(
+                        found_proxy
+                    )
+
+                    if not normalized:
+                        continue
+
+                    if normalized in seen:
+                        continue
+
+                    if self.is_proxy_already_sent(
+                        normalized
+                    ):
+                        continue
+
+                    seen.add(normalized)
+                    result.append(normalized)
+
+                parent = msg.find_parent(
+                    "div",
+                    class_="tgme_widget_message_wrap"
+                )
+
+                if not parent:
+                    continue
+
+                buttons = parent.find_all(
+                    "a",
+                    href=True
+                )
+
                 for btn in buttons:
-                    href = btn.get('href', '').strip()
+
+                    href = btn.get(
+                        "href",
+                        ""
+                    ).strip()
+
                     if not href:
                         continue
-                    href_lower = href.lower()
-                    if "joinchat" in href_lower or "/+" in href_lower:
-                        continue
-                    if (href.startswith("tg://proxy?") or 
-                        href.startswith("tg://socks?") or 
-                        href.startswith("https://t.me/proxy?") or 
-                        href.startswith("https://t.me/socks?") or 
-                        href.startswith("mtproto://") or 
-                        href.startswith("socks5://")):
-                        n = self.normalize_proxy(href)
-                        if n not in seen and not self.is_proxy_already_sent(n):
-                            seen.add(n)
-                            result.append(n)
-        self.failed_counter[url] = 0
-        remove_from_dead_cache(url)
-        self.dead_cache.discard(url)
-        return result
 
-    def collect_all_proxies(self) -> List[Tuple[str, str]]:
-        allp = []
+                    href_lower = href.lower()
+
+                    if "joinchat" in href_lower:
+                        continue
+
+                    if "/+" in href:
+                        continue
+
+                    if not (
+                        href.startswith("tg://proxy?")
+                        or href.startswith("tg://socks?")
+                        or href.startswith("https://t.me/proxy?")
+                        or href.startswith("https://t.me/socks?")
+                        or href.startswith("mtproto://")
+                        or href.startswith("socks5://")
+                    ):
+                        continue
+
+                    normalized = self.normalize_proxy(
+                        href
+                    )
+
+                    if not normalized:
+                        continue
+
+                    if normalized in seen:
+                        continue
+
+                    if self.is_proxy_already_sent(
+                        normalized
+                    ):
+                        continue
+
+                    seen.add(normalized)
+                    result.append(normalized)
+
+            self.failed_counter[url] = 0
+
+            remove_from_dead_cache(url)
+            self.dead_cache.discard(url)
+
+            logger.info(
+                f"{url} -> {len(result)} new proxies"
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error(
+                f"Extraction failed for {url}: {e}"
+            )
+
+            self.update_dead_cache(url)
+
+            return []
+
+    def collect_all_proxies(
+        self
+    ) -> List[Tuple[str, str]]:
+
+        all_proxies = []
         seen = set()
-        for c in CHANNELS:
-            ps = self.extract_proxies_from_channel(c)
-            for p in ps:
-                if p not in seen:
-                    seen.add(p)
-                    t = "MTProto" if "proxy" in p or "mtproto" in p.lower() else "SOCKS5"
-                    allp.append((p, t))
-        return allp
+
+        for channel in CHANNELS:
+
+            proxies = self.extract_proxies_from_channel(
+                channel
+            )
+
+            for proxy in proxies:
+
+                if proxy in seen:
+                    continue
+
+                seen.add(proxy)
+
+                proxy_type = (
+                    "MTProto"
+                    if (
+                        "tg://proxy?" in proxy
+                        or "mtproto" in proxy.lower()
+                    )
+                    else "SOCKS5"
+                )
+
+                all_proxies.append(
+                    (proxy, proxy_type)
+                )
+
+        logger.info(
+            f"Total new proxies collected: "
+            f"{len(all_proxies)}"
+        )
+
+        return all_proxies
 
 
 class TelegramSender:
-    def __init__(self, token: str, chat_id: int):
+
+    def __init__(
+        self,
+        token: str,
+        chat_id: int
+    ):
         self.token = token
         self.chat_id = chat_id
-        self.api = f"https://api.telegram.org/bot{token}"
+        self.api = (
+            f"https://api.telegram.org/bot{token}"
+        )
 
-    def send_sticker(self):
+    def _request(
+        self,
+        method: str,
+        data: dict
+    ) -> Optional[dict]:
+
         try:
-            data = {
-                "chat_id": self.chat_id,
-                "sticker": "CAACAgQAAxkBAAFQIL5qZXtiZQTtLDIR56wqlUYO_JqmZgACvBsAAl2aMFOFxfprKF6fCz0E"
-            }
-            r = requests.post(
-                self.api + "/sendSticker",
+            response = requests.post(
+                f"{self.api}/{method}",
                 data=data,
                 timeout=30
             )
-            if r.status_code == 200:
-                logger.info("Logo sticker sent successfully.")
-            else:
-                logger.warning("Failed to send logo sticker.")
-            return r.status_code == 200
-        except Exception as e:
-            logger.error(f"Sticker send failed: {e}")
-            return False
 
-    def send_message(self, text: str, reply_markup=None) -> bool:
-        try:
-            data = {
+            try:
+                result = response.json()
+            except ValueError:
+                result = {
+                    "ok": False,
+                    "description": response.text
+                }
+
+            if not response.ok or not result.get("ok"):
+                logger.error(
+                    f"Telegram {method} failed: "
+                    f"HTTP {response.status_code} - "
+                    f"{result.get('description', 'Unknown error')}"
+                )
+
+                return result
+
+            return result
+
+        except requests.RequestException as e:
+            logger.error(
+                f"Telegram {method} request error: {e}"
+            )
+
+            return None
+
+    def delete_message(
+        self,
+        message_id: int
+    ) -> bool:
+
+        result = self._request(
+            "deleteMessage",
+            {
                 "chat_id": self.chat_id,
-                "text": text,
-                "parse_mode": "HTML",
-                "disable_web_page_preview": True
+                "message_id": message_id
             }
-            if reply_markup:
-                data["reply_markup"] = json.dumps(reply_markup)
-            r = requests.post(self.api + "/sendMessage", data=data, timeout=30)
-            return r.status_code == 200
-        except:
-            return False
+        )
 
-    def create_proxy_keyboard(self, proxies: List[Tuple[str, str]]) -> dict:
-        kb = []
-        row = []
-        for i, (p, t) in enumerate(proxies):
-            if t == "MTProto":
-                label = "MTProto"
+        if result and result.get("ok"):
+            logger.info(
+                f"Deleted Telegram message: {message_id}"
+            )
+            return True
+
+        description = (
+            result.get("description", "")
+            if result
+            else ""
+        )
+
+        if "message to delete not found" in description.lower():
+            logger.info(
+                f"Message already deleted: {message_id}"
+            )
+            return True
+
+        logger.warning(
+            f"Failed to delete message "
+            f"{message_id}: {description}"
+        )
+
+        return False
+
+    def delete_previous_messages(self) -> bool:
+
+        previous_messages = get_bot_messages()
+
+        if not previous_messages:
+            logger.info(
+                "No previous bot messages found."
+            )
+            return True
+
+        logger.info(
+            f"Found {len(previous_messages)} "
+            f"previous bot messages."
+        )
+
+        all_deleted = True
+
+        for message_id, message_type in previous_messages:
+
+            if self.delete_message(message_id):
+                delete_bot_message_record(
+                    message_id
+                )
+
+                logger.info(
+                    f"Previous {message_type} removed: "
+                    f"{message_id}"
+                )
+
             else:
-                label = "SOCKS5"
+                all_deleted = False
+
+        return all_deleted
+
+    def send_sticker(self) -> Optional[int]:
+
+        result = self._request(
+            "sendSticker",
+            {
+                "chat_id": self.chat_id,
+                "sticker": STICKER_ID
+            }
+        )
+
+        if result and result.get("ok"):
+
+            message_id = result["result"]["message_id"]
+
+            save_bot_message(
+                message_id,
+                "sticker"
+            )
+
+            logger.info(
+                f"Logo sticker sent successfully: "
+                f"{message_id}"
+            )
+
+            return message_id
+
+        logger.warning(
+            "Failed to send logo sticker."
+        )
+
+        return None
+
+    def send_message(
+        self,
+        text: str,
+        reply_markup=None
+    ) -> Optional[int]:
+
+        data = {
+            "chat_id": self.chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True
+        }
+
+        if reply_markup:
+            data["reply_markup"] = json.dumps(
+                reply_markup,
+                ensure_ascii=False
+            )
+
+        result = self._request(
+            "sendMessage",
+            data
+        )
+
+        if result and result.get("ok"):
+
+            message_id = result["result"]["message_id"]
+
+            save_bot_message(
+                message_id,
+                "proxy"
+            )
+
+            return message_id
+
+        return None
+
+    def create_proxy_keyboard(
+        self,
+        proxies: List[Tuple[str, str]]
+    ) -> dict:
+
+        keyboard = []
+        row = []
+
+        for proxy, proxy_type in proxies:
+
+            label = (
+                "MTProto"
+                if proxy_type == "MTProto"
+                else "SOCKS5"
+            )
+
             row.append({
                 "text": label,
-                "url": p
+                "url": proxy
             })
-            if len(row) == 4:
-                kb.append(row)
-                row = []
-        if row:
-            kb.append(row)
-        return {"inline_keyboard": kb}
 
-    def create_caption(self, proxies: List[Tuple[str, str]]) -> str:
-        return """ 🅿🆁🅾🆇🆈
+            if len(row) == 4:
+                keyboard.append(row)
+                row = []
+
+        if row:
+            keyboard.append(row)
+
+        return {
+            "inline_keyboard": keyboard
+        }
+
+    def create_caption(
+        self,
+        proxies: List[Tuple[str, str]]
+    ) -> str:
+
+        return """🅿🆁🅾🆇🆈
 
 🛜 پروکسی‌های جدید.
 ✅ برای اتصال به پروکسی‌ها از دکمه‌های زیر استفاده کنید.
@@ -392,39 +1049,142 @@ class TelegramSender:
 #Arista #پروکسی #proxy #MTProto #SOCKS5
 <blockquote>مرگ بر جمهوری اسهالی</blockquote>"""
 
-    def send_proxies_batch(self, proxies: List[Tuple[str, str]]) -> bool:
+    def send_proxies_batch(
+        self,
+        proxies: List[Tuple[str, str]]
+    ) -> Optional[int]:
+
         if not proxies:
-            return False
-        return self.send_message(self.create_caption(proxies), self.create_proxy_keyboard(proxies))
+            return None
+
+        text = self.create_caption(
+            proxies
+        )
+
+        keyboard = self.create_proxy_keyboard(
+            proxies
+        )
+
+        return self.send_message(
+            text,
+            keyboard
+        )
 
 
 class ProxyScheduler:
+
     def __init__(self):
         init_db()
         clean_old_proxies()
         clean_dead_cache()
+
         self.ext = MTProtoSocksExtractor()
-        self.sender = TelegramSender(BOT_TOKEN, CHANNEL_ID)
+
+        self.sender = TelegramSender(
+            BOT_TOKEN,
+            CHANNEL_ID
+        )
 
     async def run_once(self):
+
         proxies = self.ext.collect_all_proxies()
+
+        if not proxies:
+            logger.info(
+                "No new proxies found."
+            )
+            return
+
+        logger.info(
+            "Removing previous proxy messages "
+            "and sticker."
+        )
+
+        self.sender.delete_previous_messages()
+
         sent_in_run = []
-        if proxies:
-            for i in range(0, len(proxies), MAX_PROXIES_PER_POST):
-                batch = proxies[i:i + MAX_PROXIES_PER_POST]
-                if self.sender.send_proxies_batch(batch):
-                    for p, _ in batch:
-                        sent_in_run.append(p)
-                await asyncio.sleep(1)
-            if sent_in_run:
-                mark_as_sent_batch(sent_in_run)
-                for p in sent_in_run:
-                    self.ext.sent_hashes.add(hashlib.md5(p.encode()).hexdigest())
-                self.sender.send_sticker()
+
+        total_batches = (
+            (len(proxies) + MAX_PROXIES_PER_POST - 1)
+            // MAX_PROXIES_PER_POST
+        )
+
+        logger.info(
+            f"Sending {len(proxies)} proxies "
+            f"in {total_batches} batches."
+        )
+
+        for index in range(
+            0,
+            len(proxies),
+            MAX_PROXIES_PER_POST
+        ):
+
+            batch = proxies[
+                index:index + MAX_PROXIES_PER_POST
+            ]
+
+            batch_number = (
+                index // MAX_PROXIES_PER_POST
+            ) + 1
+
+            logger.info(
+                f"Sending batch "
+                f"{batch_number}/{total_batches} "
+                f"with {len(batch)} proxies."
+            )
+
+            message_id = self.sender.send_proxies_batch(
+                batch
+            )
+
+            if message_id:
+
+                for proxy, _ in batch:
+                    sent_in_run.append(proxy)
+
+                logger.info(
+                    f"Batch {batch_number} sent successfully: "
+                    f"{message_id}"
+                )
+
+            else:
+                logger.error(
+                    f"Batch {batch_number} failed."
+                )
+
+            await asyncio.sleep(1)
+
+        if sent_in_run:
+
+            mark_as_sent_batch(
+                sent_in_run
+            )
+
+            for proxy in sent_in_run:
+                self.ext.sent_hashes.add(
+                    hashlib.md5(
+                        proxy.encode("utf-8")
+                    ).hexdigest()
+                )
+
+            self.sender.send_sticker()
+
+            logger.info(
+                f"Run completed successfully. "
+                f"Sent: {len(sent_in_run)} proxies."
+            )
+
+        else:
+            logger.warning(
+                "No proxy batch was sent successfully."
+            )
 
 
 def main():
-    asyncio.run(ProxyScheduler().run_once())
+    asyncio.run(
+        ProxyScheduler().run_once()
+    )
 
 
 if __name__ == "__main__":
