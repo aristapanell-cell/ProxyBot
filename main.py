@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Set, Tuple, Optional
 from urllib.parse import urlparse, parse_qs
 from bs4 import BeautifulSoup
+from html import escape
 
 logging.basicConfig(
     level=logging.INFO,
@@ -1004,21 +1005,18 @@ class TelegramSender:
     def create_proxy_keyboard(
         self,
         proxies: List[Tuple[str, str]]
-    ) -> dict:
+    ) -> Optional[dict]:
 
         keyboard = []
         row = []
 
         for proxy, proxy_type in proxies:
 
-            label = (
-                "MTProto"
-                if proxy_type == "MTProto"
-                else "SOCKS5"
-            )
+            if proxy_type != "MTProto":
+                continue
 
             row.append({
-                "text": label,
+                "text": "MTProto",
                 "url": proxy
             })
 
@@ -1029,25 +1027,63 @@ class TelegramSender:
         if row:
             keyboard.append(row)
 
+        if not keyboard:
+            return None
+
         return {
             "inline_keyboard": keyboard
         }
+
+    def create_socks_blockquote(
+        self,
+        proxies: List[Tuple[str, str]]
+    ) -> str:
+
+        socks = [
+            proxy
+            for proxy, proxy_type in proxies
+            if proxy_type == "SOCKS5"
+        ]
+
+        if not socks:
+            return ""
+
+        lines = [
+            escape(proxy)
+            for proxy in socks
+        ]
+
+        return (
+            "\n\n"
+            "<blockquote>"
+            + "\n".join(lines)
+            + "</blockquote>"
+        )
 
     def create_caption(
         self,
         proxies: List[Tuple[str, str]]
     ) -> str:
 
-        return """🅿🆁🅾🆇🆈
+        socks_block = self.create_socks_blockquote(
+            proxies
+        )
+
+        return (
+            """🅿🆁🅾🆇🆈
 
 🛜 پروکسی‌های جدید.
-✅ برای اتصال به پروکسی‌ها از دکمه‌های زیر استفاده کنید.
+✅ برای اتصال به پروکسی‌های MTProto از دکمه‌های زیر استفاده کنید.
+"""
+            + socks_block
+            + """
 <blockquote>👈 <a href="https://t.me/aristapanel/46625">دسترسی به جدیدترین کانفیگ‌ها</a></blockquote>
 ➖➖➖➖➖➖➖➖
 <blockquote>@aristapanel</blockquote>
 ➖➖➖➖➖➖➖➖
 #Arista #پروکسی #proxy #MTProto #SOCKS5
 <blockquote>مرگ بر جمهوری اسهالی</blockquote>"""
+        )
 
     def send_proxies_batch(
         self,
