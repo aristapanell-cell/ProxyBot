@@ -9,7 +9,7 @@ import sqlite3
 import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Set, Tuple, Optional
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urlencode
 from bs4 import BeautifulSoup
 from html import escape
 
@@ -493,6 +493,8 @@ class MTProtoSocksExtractor:
                 or href.startswith("tg://socks?")
                 or href.startswith("https://t.me/proxy?")
                 or href.startswith("https://t.me/socks?")
+                or href.startswith("http://t.me/proxy?")
+                or href.startswith("http://t.me/socks?")
                 or href.startswith("mtproto://")
                 or href.startswith("socks5://")
             ):
@@ -501,52 +503,61 @@ class MTProtoSocksExtractor:
                 if normalized:
                     proxies.append(normalized)
 
-        return list(set(proxies))
+        return list(dict.fromkeys(proxies))
 
     def normalize_proxy(self, proxy: str) -> str:
         proxy = proxy.strip()
         proxy = proxy.replace("&amp;", "&")
-        proxy = proxy.replace("amp;", "")
+
+        if proxy.startswith("http://t.me/proxy?"):
+            return proxy
 
         if proxy.startswith("https://t.me/proxy?"):
-            proxy = proxy.replace(
-                "https://t.me/proxy?",
-                "tg://proxy?",
-                1
-            )
+            return proxy
 
-        elif proxy.startswith("https://t.me/socks?"):
-            proxy = proxy.replace(
-                "https://t.me/socks?",
-                "tg://socks?",
-                1
-            )
+        if proxy.startswith("http://t.me/socks?"):
+            return proxy
 
-        if proxy.startswith(
-            ("tg://proxy?", "tg://socks?")
-        ):
+        if proxy.startswith("https://t.me/socks?"):
+            return proxy
+
+        if proxy.startswith("tg://proxy?"):
+            return proxy
+
+        if proxy.startswith("tg://socks?"):
+            return proxy
+
+        if proxy.startswith("mtproto://"):
+            return proxy
+
+        if proxy.startswith("socks5://"):
             try:
                 parsed = urlparse(proxy)
-                query = parse_qs(parsed.query)
 
-                params = {
-                    key: query[key][0].strip()
-                    for key in sorted(query)
-                    if query[key]
-                }
+                if not parsed.hostname or not parsed.port:
+                    return proxy
 
-                if not params:
-                    return ""
+                server = parsed.hostname
+                port = parsed.port
+
+                params = [
+                    ("server", server),
+                    ("port", str(port))
+                ]
+
+                if parsed.username:
+                    params.append(
+                        ("user", parsed.username)
+                    )
+
+                if parsed.password:
+                    params.append(
+                        ("pass", parsed.password)
+                    )
 
                 return (
-                    parsed.scheme
-                    + "://"
-                    + parsed.netloc
-                    + "?"
-                    + "&".join(
-                        f"{key}={params[key]}"
-                        for key in sorted(params)
-                    )
+                    "tg://socks?"
+                    + urlencode(params)
                 )
 
             except Exception:
@@ -561,10 +572,11 @@ class MTProtoSocksExtractor:
 
                 return (
                     f"tg://proxy?"
-                    f"port={port}"
+                    f"server={ip}"
+                    f"&port={port}"
                     f"&secret={secret.lower()}"
-                    f"&server={ip}"
                 )
+
             except ValueError:
                 return proxy
 
@@ -575,7 +587,11 @@ class MTProtoSocksExtractor:
             try:
                 ip, port = proxy.split(":")
 
-                return f"socks5://{ip}:{port}"
+                return (
+                    f"tg://socks?"
+                    f"server={ip}"
+                    f"&port={port}"
+                )
 
             except ValueError:
                 return proxy
@@ -588,8 +604,11 @@ class MTProtoSocksExtractor:
                 ip, port, user, password = proxy.split(":")
 
                 return (
-                    f"socks5://"
-                    f"{user}:{password}@{ip}:{port}"
+                    f"tg://socks?"
+                    f"server={ip}"
+                    f"&port={port}"
+                    f"&user={user}"
+                    f"&pass={password}"
                 )
 
             except ValueError:
@@ -725,6 +744,8 @@ class MTProtoSocksExtractor:
                         or href.startswith("tg://socks?")
                         or href.startswith("https://t.me/proxy?")
                         or href.startswith("https://t.me/socks?")
+                        or href.startswith("http://t.me/proxy?")
+                        or href.startswith("http://t.me/socks?")
                         or href.startswith("mtproto://")
                         or href.startswith("socks5://")
                     ):
@@ -788,14 +809,26 @@ class MTProtoSocksExtractor:
 
                 seen.add(proxy)
 
-                proxy_type = (
-                    "MTProto"
-                    if (
-                        "tg://proxy?" in proxy
-                        or "mtproto" in proxy.lower()
-                    )
-                    else "SOCKS5"
-                )
+                proxy_lower = proxy.lower()
+
+                if (
+                    proxy_lower.startswith("tg://proxy?")
+                    or proxy_lower.startswith("https://t.me/proxy?")
+                    or proxy_lower.startswith("http://t.me/proxy?")
+                    or proxy_lower.startswith("mtproto://")
+                ):
+                    proxy_type = "MTProto"
+
+                elif (
+                    proxy_lower.startswith("tg://socks?")
+                    or proxy_lower.startswith("https://t.me/socks?")
+                    or proxy_lower.startswith("http://t.me/socks?")
+                    or proxy_lower.startswith("socks5://")
+                ):
+                    proxy_type = "SOCKS5"
+
+                else:
+                    proxy_type = "SOCKS5"
 
                 all_proxies.append(
                     (proxy, proxy_type)
@@ -1012,13 +1045,19 @@ class TelegramSender:
 
         for proxy, proxy_type in proxies:
 
-            if proxy_type != "MTProto":
-                continue
+            if proxy_type == "MTProto":
 
-            row.append({
-                "text": "MTProto",
-                "url": proxy
-            })
+                row.append({
+                    "text": "MTProto",
+                    "url": proxy
+                })
+
+            elif proxy_type == "SOCKS5":
+
+                row.append({
+                    "text": "SOCKS5",
+                    "url": proxy
+                })
 
             if len(row) == 4:
                 keyboard.append(row)
@@ -1073,7 +1112,7 @@ class TelegramSender:
             """🅿🆁🅾🆇🆈
 
 🛜 پروکسی‌های جدید.
-✅ برای اتصال به پروکسی‌های MTProto از دکمه‌های زیر استفاده کنید.
+✅ برای اتصال به پروکسی‌های MTProto و SOCKS5 از دکمه‌های زیر استفاده کنید.
 """
             + socks_block
             + """
@@ -1142,7 +1181,8 @@ class ProxyScheduler:
 
         total_batches = (
             (len(proxies) + MAX_PROXIES_PER_POST - 1)
-            // MAX_PROXIES_PER_POST
+            //
+            MAX_PROXIES_PER_POST
         )
 
         logger.info(
