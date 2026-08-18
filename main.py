@@ -1100,24 +1100,24 @@ class TelegramSender:
         )
 
     def create_caption(
-    self,
-    proxies: List[Tuple[str, str]]
-) -> str:
+        self,
+        proxies: List[Tuple[str, str]]
+    ) -> str:
 
-    return (
-        """🅿🆁🅾🆇🆈
+        return (
+            """🅿🆁🅾🆇🆈
 
 🛜 پروکسی‌های جدید.
 ✅ برای اتصال به پروکسی‌های MTProto و SOCKS5 از دکمه‌های زیر استفاده کنید.
 """
-        + """
+            + """
 <blockquote>👈 <a href="https://t.me/aristapanel/46625">دسترسی به جدیدترین کانفیگ‌ها</a></blockquote>
 ➖➖➖➖➖➖➖➖
 <blockquote>@aristapanel</blockquote>
 ➖➖➖➖➖➖➖➖
 #Arista #پروکسی #proxy #MTProto #SOCKS5
 <blockquote>مرگ بر جمهوری اسهالی</blockquote>"""
-    )
+        )
 
     def send_proxies_batch(
         self,
