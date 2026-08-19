@@ -36,7 +36,7 @@ CHANNELS = list(dict.fromkeys([
     "https://t.me/s/BestProxyTel1",       
     "https://t.me/s/iRoProxy",
     "https://t.me/s/proxy_bolt",
-    "https://t.me/s/proxyskyy",
+    "https://t.me/s/proxyskyy"
    
 ]))
 
