@@ -27,22 +27,17 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
 CHANNELS = list(dict.fromkeys([
-    "https://t.me/s/times_config",
-    "https://t.me/s/xixv2ray",
-    "https://t.me/s/hddify",
-    "https://t.me/s/khabari_18",
-    "https://t.me/s/best_internet_iran",
-    "https://t.me/s/ProxyAnonymous",
-    "https://t.me/s/JavidanNet",
-    "https://t.me/s/ProxyMTProto_tel",
-    "https://t.me/s/BestProxyTel1",
-    "https://t.me/s/proxyir01",
-    "https://t.me/s/proxymtprotoir",
-    "https://t.me/s/iRoProxy",
-    "https://t.me/s/IPCF_Proxy",
-    "https://t.me/s/proxy_bolt",
-    "https://t.me/s/proxyskyy",
-    "https://t.me/s/ProxySkull"
+    "https://t.me/s/xixv2ray",
+    "https://t.me/s/hddify",
+    "https://t.me/s/khabari_18", 
+    "https://t.me/s/ProxyAnonymous",
+    "https://t.me/s/JavidanNet",
+    "https://t.me/s/ProxyMTProto_tel",
+    "https://t.me/s/BestProxyTel1",       
+    "https://t.me/s/iRoProxy",
+    "https://t.me/s/proxy_bolt",
+    "https://t.me/s/proxyskyy",
+   
 ]))
 
 IPV4 = r'(?:25[0-5]|2[0-4]\d|1?\d?\d)'
