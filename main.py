@@ -27,6 +27,7 @@ if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN environment variable is required")
 
 CHANNELS = list(dict.fromkeys([
+    "https://t.me/s/Config_HATunnel",
     "https://t.me/s/xixv2ray",
     "https://t.me/s/hddify",
     "https://t.me/s/khabari_18",
