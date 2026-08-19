@@ -1,5 +1,3 @@
-
-# main.py
 import requests
 import re
 import json
@@ -1256,63 +1254,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-------------------
-
-# .github/workflows/proxy.yml
-name: AristaProxy MTProto & SOCKS5 Extractor
-
-on:
-  schedule:
-    - cron: '0 */6 * * *'
-  workflow_dispatch:
-  push:
-    branches: [ main ]
-
-permissions:
-  contents: write
-
-jobs:
-  extract-proxies:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Restore database cache
-        uses: actions/cache/restore@v4
-        with:
-          path: sent_proxies.db
-          key: sent-proxies-db-${{ github.run_id }}
-          restore-keys: |
-            sent-proxies-db-
-
-      - uses: actions/setup-python@v6
-        with:
-          python-version: '3.11'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-
-      - name: Run proxy extractor
-        run: python main.py
-        env:
-          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
-          CHANNEL_ID: ${{ secrets.CHANNEL_ID }}
-
-      - name: Save database cache
-        uses: actions/cache/save@v4
-        if: always()
-        with:
-          path: sent_proxies.db
-          key: sent-proxies-db-${{ github.run_id }}
-
----------------
-
-# requirements.txt
-requests==2.31.0
-beautifulsoup4==4.12.2
-
